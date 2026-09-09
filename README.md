@@ -1,3 +1,9 @@
+
+<p align="center">
+  <img src="logo.png" alt="NeuroLia Logo" width="180"/>
+</p>
+
+
 # Clash Royale Opponent CV Bot
 
 A computer vision project for detecting opponent cards, identifying deck patterns, and predicting the opponent's next move.
