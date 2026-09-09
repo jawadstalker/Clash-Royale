@@ -1,135 +1,283 @@
-```markdown
 # Clash Royale Opponent CV Bot
 
-A computer vision project for detecting opponent cards, deck patterns, and predicting the next move.
+A computer vision project for detecting opponent cards, identifying deck patterns, and predicting the opponent's next move.
 
 ## Project Structure
 
-```
+```text
 clash-cv-bot/
+
 ├── src/
-│   ├── config.py           # Configuration and API token
-│   ├── fetch_cards.py      # Download card dataset from official API
-│   ├── capture_frame.py    # Capture live frame from emulator via ADB
-│   └── card_detector.py    # (Next phase) Card detection with YOLO
+│   ├── config.py             # API configuration and token
+│   ├── fetch_cards.py        # Download card dataset from the official API
+│   ├── capture_frame.py       # Capture live frames from the emulator using ADB
+│   └── card_detector.py       # (Next phase) Card detection using YOLO
+
 ├── data/
-│   └── cards/              # Card images and metadata stored here
+│   └── cards/                # Card images and metadata are stored here
+
 ├── requirements.txt
 └── README.md
 ```
 
-## Step 1: Get API Key
+## Step 1: Get an Official API Key
 
-1. Go to https://developer.clashroyale.com and register
-2. Create a new Key and **whitelist your server/system IP** in it
-   (The API is IP-restricted; if you have a dynamic IP, update it each time or use the RoyaleAPI proxy: `https://proxy.royaleapi.dev/v1`)
-3. Place the token in a `.env` file or directly in `src/config.py` (explained in the file)
+1. Go to https://developer.clashroyale.com and create an account.
 
-## Step 2: Install Prerequisites
+2. Create a new API key and **whitelist the public IP address of your server/system**.
+
+   The API is restricted by IP address. If you have a dynamic IP, you may need to update the whitelist whenever your IP changes.
+
+   Alternatively, you can use the RoyaleAPI proxy:
+
+   `https://proxy.royaleapi.dev/v1`
+
+3. Store the token in a `.env` file or directly in `src/config.py`.
+
+   Instructions for configuring the token are provided in the corresponding file.
+
+## Step 2: Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-To capture frames from the emulator, you need ADB:
+To capture frames from the emulator, you also need ADB:
+
+### Linux / macOS
+
 ```bash
-# Linux/macOS
-sudo apt install adb   # or brew install android-platform-tools
-adb devices            # Should list your emulator
+sudo apt install adb
 ```
 
-## Step 3: Download Card Dataset
+Or on macOS:
+
+```bash
+brew install android-platform-tools
+```
+
+Then verify that your emulator is detected:
+
+```bash
+adb devices
+```
+
+The emulator should appear in the list of connected devices.
+
+## Step 3: Download the Card Dataset
+
+Run:
 
 ```bash
 python src/fetch_cards.py
 ```
 
-This script saves the full card list along with each card's image into `data/cards/` — 
-this is the base dataset for training the card detection model (YOLO).
+This script downloads the list of all available cards along with their images and stores them in:
+
+```text
+data/cards/
+```
+
+This dataset serves as the base dataset for training the card detection model (YOLO).
 
 ## Step 4: Test Live Frame Capture
+
+Run:
 
 ```bash
 python src/capture_frame.py
 ```
 
-Takes a screenshot from the emulator and saves it in `data/frames/` — the first step of the live CV pipeline.
+The script captures a screenshot from the emulator and saves it in:
 
-## Step 5: Build Synthetic Dataset (Instead of Manual Labeling)
+```text
+data/frames/
+```
 
-Manually annotating thousands of real frames is time-consuming, so we automatically paste downloaded cards onto empty arena backgrounds and compute precise bboxes ourselves:
+This is the first step in building the live computer vision pipeline.
 
-1. Set `ARENA_BBOX` in `src/config.py` to match your actual emulator/phone screen coordinates
-   (Take a screenshot and find the arena boundaries in an image editor)
-2. Take several (10-20) **empty** arena screenshots (no units, just at the start of a match) and place them in `data/backgrounds/`
-3. Generate the dataset:
-   ```bash
-   python src/generate_dataset.py --count 3000 --val-split 0.15
-   ```
-   Output is saved in `data/dataset/` in standard YOLO format (includes `data.yaml`)
+## Step 5: Generate a Synthetic Dataset
 
-## Step 6: Train YOLOv8 Model
+Manually annotating thousands of real gameplay frames is extremely time-consuming. Instead, we can automatically place the downloaded card images onto empty arena backgrounds and calculate the bounding boxes automatically.
+
+### 1. Configure the Arena Bounding Box
+
+Set the `ARENA_BBOX` value in:
+
+```text
+src/config.py
+```
+
+to match the actual coordinates of the arena on your phone/emulator.
+
+Take a screenshot and use an image editor to determine the exact boundaries of the playable arena.
+
+### 2. Collect Empty Arena Backgrounds
+
+Take around **10–20 screenshots** of the empty arena:
+
+* No troops or units
+* No cards placed on the battlefield
+* Preferably from the beginning of a match
+
+Place these images in:
+
+```text
+data/backgrounds/
+```
+
+### 3. Generate the Dataset
+
+Run:
+
+```bash
+python src/generate_dataset.py --count 3000 --val-split 0.15
+```
+
+The generated dataset will be stored in:
+
+```text
+data/dataset/
+```
+
+in the standard YOLO format, including a `data.yaml` file.
+
+## Step 6: Train the YOLOv8 Model
+
+Install Ultralytics:
 
 ```bash
 pip install ultralytics
+```
+
+Then train the model:
+
+```bash
 python src/train_yolo.py --epochs 50
 ```
 
-Final weights are saved in `runs/detect/clash_royale_card_detector/weights/best.pt`.
+The final model weights will be saved at:
 
-> Note: Since the dataset is synthetic (real background + pasted cards), the model will have lower accuracy on actual gameplay frames (with real lighting/effects/animations). After this step, we need to fine-tune the model with a small number of manually-labeled real frames (about 200-500) to bridge the synthetic-to-real gap.
+```text
+runs/detect/clash_royale_card_detector/weights/best.pt
+```
 
-## Step 7: Live Detection + Match History Logging
+> **Note:** Since the dataset is synthetic (real backgrounds + separate card images), the model may perform worse on real gameplay frames due to lighting, visual effects, animations, scaling differences, and other real-world variations.
+>
+> After this stage, the model should be fine-tuned using a relatively small number of manually labeled real gameplay frames (approximately **200–500 images**) to reduce the gap between the synthetic and real-world data.
 
-With the trained model, you can now detect opponent cards during live gameplay:
+## Step 7: Live Card Detection and Match History Logging
+
+Once the model has been trained, it can be used to detect opponent cards in real time:
 
 ```bash
 python src/card_detector.py --conf 0.5 --fps 3 --show
 ```
 
-- `--show` opens a live window with bounding boxes around detected cards
-- Each sighting is logged in `data/match_logs/match_<timestamp>.jsonl`, e.g.:
-  ```json
-  {"t": 12.4, "card": "giant", "conf": 0.87, "x": 0.42}
-  {"t": 18.9, "card": "fireball", "conf": 0.91, "x": 0.55}
-  ```
-  `t` = seconds since match start, `x` = relative position across arena width (0=left, 1=right).
-  These logs are the raw data used to train the card sequence prediction model (next phase).
+### Options
 
-## Step 8: Next Card Prediction Model (Core Intelligence)
+* `--show` opens a live window displaying bounding boxes around detected cards.
+* `--conf 0.5` sets the confidence threshold to 0.5.
+* `--fps 3` processes approximately 3 frames per second.
 
-From the `match_logs/*.jsonl` collected by `card_detector.py`, an LSTM model is trained to predict the most likely next card based on the opponent's last few cards.
+Every detected card sighting is logged to:
+
+```text
+data/match_logs/match_<timestamp>.jsonl
+```
+
+For example:
+
+```json
+{"t": 12.4, "card": "giant", "conf": 0.87, "x": 0.42}
+{"t": 18.9, "card": "fireball", "conf": 0.91, "x": 0.55}
+```
+
+Where:
+
+* `t` = seconds elapsed since the beginning of the match
+* `card` = detected card name
+* `conf` = model confidence
+* `x` = normalized horizontal position of the card on the arena (`0` = left, `1` = right)
+
+These logs are the raw data that will later be used to train the card sequence prediction model.
+
+## Step 8: Next-Card Prediction Model
+
+This is the core predictive intelligence of the project.
+
+The model uses the match logs collected from:
+
+```text
+data/match_logs/*.jsonl
+```
+
+and trains an LSTM model to predict the opponent's most likely next card based on their recent card history.
+
+### 1. Convert Raw Logs into Clean Sequences
+
+Because the same card may be detected repeatedly across consecutive frames, the raw sightings first need to be deduplicated:
 
 ```bash
-# 1. Clean raw logs into proper sequences (deduplicate repeated sightings)
 python src/prepare_sequences.py
+```
 
-# 2. Train the model
+### 2. Train the Predictor
+
+Install PyTorch:
+
+```bash
 pip install torch
-python src/train_predictor.py --epochs 40
+```
 
-# 3. Make predictions
+Then train the model:
+
+```bash
+python src/train_predictor.py --epochs 40
+```
+
+### 3. Make a Prediction
+
+For example:
+
+```bash
 python src/predict_next_card.py --history knight archers giant --top-k 3
 ```
 
-**I tested this thoroughly with a strong synthetic pattern** (a hypothetical opponent who plays "fireball" 80% of the time after "giant", simulated across 40 matches): After 40 epochs, the model reached 53% accuracy on training (vs ~17% random guess with 6 cards) and when asked for "next card after giant", it gave **97.7% probability to fireball** — confirming the architecture and pipeline work correctly and are ready for real data.
+This predicts the most likely next cards based on the provided card history.
 
-Files in this phase:
-- `prepare_sequences.py` — deduplicate raw sightings into actual card-play events
-- `sequence_model.py` — LSTM model definition and card vocabulary (shared between training and prediction)
-- `train_predictor.py` — training loop
-- `predict_next_card.py` — live prediction (importable into card_detector.py for real-time predictions during gameplay)
+### Synthetic Test
 
-> Note: With real data (not synthetic), accuracy will be lower because human behavior is more random than this handcrafted pattern — but the more match_logs you collect (especially from a specific opponent/account), the better the prediction accuracy becomes for that opponent.
+The prediction pipeline was tested using a strong synthetic pattern.
 
-## Next Steps (Roadmap)
+A hypothetical opponent was simulated over **40 matches**, where the opponent played `fireball` after `giant` approximately **80% of the time**.
 
-- [x] Download card dataset from API
-- [x] Live frame capture pipeline
-- [x] Synthetic dataset generation + training script
-- [x] Connect model to live frames + log card sighting history
-- [x] Card sequence prediction model (LSTM) — tested and verified
-- [ ] Fine-tune detection model with manually-labeled real samples (for better accuracy on actual gameplay)
-- [ ] Implement OCR for elixir count reading (additional signal for more accurate predictions)
-- [ ] Integrate predict_next_card.py into the live card_detector.py loop for simultaneous detection and prediction
-```
+After 40 training epochs:
+
+* Training accuracy reached approximately **53%**
+* Random guessing with 6 cards would give approximately **17%**
+* When asked to predict the next card after `giant`, the model assigned approximately **97.7% probability to `fireball`**
+
+This confirms that the model architecture and prediction pipeline work correctly and are ready to be trained on real gameplay data.
+
+### Files in This Stage
+
+* `prepare_sequences.py` — Deduplicates raw card sightings and converts them into actual card-play events.
+* `sequence_model.py` — Defines the LSTM model and card vocabulary shared between training and prediction.
+* `train_predictor.py` — Training loop for the prediction model.
+* `predict_next_card.py` — Performs next-card prediction and can later be imported into `card_detector.py` for real-time predictions.
+
+> **Note:** Accuracy on real gameplay data will likely be lower than the synthetic test because human behavior is much less deterministic than the artificial pattern used in the experiment.
+>
+> However, collecting more match logs — especially from the same opponent or account — can improve prediction performance for that specific opponent.
+
+## Roadmap
+
+* [x] Download card dataset from the official API
+* [x] Build live frame capture pipeline
+* [x] Generate synthetic dataset + training script
+* [x] Connect the trained model to the live frame pipeline and record card detection history
+* [x] Implement the card sequence prediction model (LSTM) — tested and verified
+* [ ] Fine-tune the detection model using manually labeled real gameplay samples
+* [ ] Implement OCR to read the opponent's elixir value as an additional prediction signal
+* [ ] Integrate `predict_next_card.py` into the live `card_detector.py` loop for real-time next-card prediction
