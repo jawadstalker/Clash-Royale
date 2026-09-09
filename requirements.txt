@@ -1,0 +1,11 @@
+requests>=2.31.0
+python-dotenv>=1.0.0
+opencv-python>=4.9.0
+numpy>=1.26.0
+Pillow>=10.2.0
+
+ultralytics>=8.1.0
+torch>=2.2.0
+
+# فاز بعدی (OCR برای خواندن الکسیر) - وقتی به آن مرحله رسیدیم فعال می‌کنیم
+# easyocr>=1.7.1
