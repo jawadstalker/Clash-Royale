@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from card_cycle import CardCycleEngine, CardCycleError
+try:
+    from .card_cycle import CardCycleEngine, CardCycleError
+except ImportError:  # Running as a script with src/ on sys.path.
+    from card_cycle import CardCycleEngine, CardCycleError
 
 
 class MatchEventProcessor:
