@@ -108,6 +108,15 @@ class EventEngine:
             key = self._location_key(card, x)
             valid.append((key, card, confidence, x))
 
+        # A detector can return duplicate boxes for the same card/location in a
+        # single frame. Keep only the strongest one so a single frame cannot
+        # satisfy a multi-frame confirmation threshold.
+        strongest: dict[tuple[str, int], tuple[tuple[str, int], str, float, float | None]] = {}
+        for item in valid:
+            key, card, confidence, x = item
+            if key not in strongest or confidence > strongest[key][2]:
+                strongest[key] = item
+        valid = list(strongest.values())
         seen_keys = {item[0] for item in valid}
         for key in list(self._candidates):
             if key not in seen_keys:
